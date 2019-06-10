@@ -15,11 +15,11 @@ import (
 var (
 	err error
 
-	brokers  = []string{"10.23.39.129:9092", "10.23.39.129:9093", "10.23.39.129:9094"}
+	brokers  = []string{"192.168.0.101:9092", "192.168.0.101:9093", "192.168.0.101:9094"}
 	topic    = "topic001"
 	producer sarama.SyncProducer
 
-	mockNum = 10 //模拟每秒并发数量
+	mockNum = 10000 //模拟每秒并发数量
 )
 
 func main() {
@@ -31,18 +31,39 @@ func main() {
 	defer producer.Close()
 	go stasticGroutine()
 
-	var wg sync.WaitGroup
+	// 乱序push
+	// var wg sync.WaitGroup
+	// for {
+	// 	wg.Add(mockNum)
+	// 	for i := 0; i < mockNum; i++ {
+	// 		go asyncProducer(i, &wg)
+	// 	}
+	// 	wg.Wait()
+	// 	time.Sleep(time.Second)
+	// }
+
+	// 顺序push便于调试
 	for {
-		wg.Add(mockNum)
 		for i := 0; i < mockNum; i++ {
-			go syncProducer(i, &wg)
+			value := fmt.Sprintf("sync: this is a kafka message. index=%d", i)
+			msg := &sarama.ProducerMessage{
+				Topic: topic,
+				Key:   sarama.ByteEncoder(strconv.Itoa(i)),
+				Value: sarama.ByteEncoder(value),
+			}
+
+			part, offset, err := producer.SendMessage(msg)
+			if err != nil {
+				log.Printf("send message(%s) err=%s \n", value, err)
+			} else {
+				fmt.Fprintf(os.Stdout, value+"发送成功，partition=%d, offset=%d \n", part, offset)
+			}
 		}
-		wg.Wait()
 		time.Sleep(time.Second)
 	}
 }
 
-func syncProducer(i int, wg *sync.WaitGroup) {
+func asyncProducer(i int, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	value := fmt.Sprintf("sync: this is a kafka message. index=%d", i)

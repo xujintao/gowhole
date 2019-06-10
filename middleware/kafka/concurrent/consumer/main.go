@@ -22,13 +22,13 @@ var (
 
 	//queue
 	chanSize    = 1024
-	queueLen    = 10
+	queueLen    = 3
 	workerQueue []chan []byte
 
 	//kafak
 	config   *cluster.Config
 	consumer *cluster.Consumer
-	brokers  = []string{"10.23.39.129:9092", "10.23.39.129:9093", "10.23.39.129:9094"}
+	brokers  = []string{"192.168.0.101:9092", "192.168.0.101:9093", "192.168.0.101:9094"}
 	topics   = []string{"topic001"}
 	groupID  = "group-1"
 
@@ -46,7 +46,7 @@ func main() {
 	go stasticGroutine()
 
 	dqName := "mychan" + strconv.Itoa(int(time.Now().Unix()))
-	tmpDir, err := ioutil.TempDir("/data/app/go/src/gowhole/middleware/kafka/concurrent/consumer", fmt.Sprintf("test-%d", time.Now().Unix()))
+	tmpDir, err := ioutil.TempDir(".", fmt.Sprintf("test-%d", time.Now().Unix()))
 	if err != nil {
 		panic(err)
 	}
@@ -75,13 +75,17 @@ func main() {
 	for i := 0; i < queueLen; i++ {
 		ch := make(chan []byte, chanSize)
 		workerQueue[i] = ch
-		go func(m chan []byte) {
-			for v := range m {
-				//todo 业务逻辑，耗时用sleep代替
-				log.Println("业务逻辑处理", string(v))
-				time.Sleep(time.Second * 1)
-			}
-		}(ch)
+
+		// 每个通道搞100个协程
+		for j := 0; j < 100; j++ {
+			go func(m chan []byte) {
+				for v := range m {
+					//todo 业务逻辑，耗时用sleep代替
+					time.Sleep(time.Millisecond * 20) // 50ms
+					log.Println("业务逻辑处理", string(v))
+				}
+			}(ch)
+		}
 	}
 
 	signal.Notify(signals, os.Interrupt)
@@ -123,12 +127,13 @@ func consume() {
 				log.Fatalf("consumer.Messages: %+v \n", ok)
 				return
 			}
-			fmt.Fprintf(os.Stdout, "GroupID-(%s):Topic(%s)\tPartition(%d)\tOffset(%d)\tKey(%s)\tValue(%s)\n",
-				groupID, msg.Topic, msg.Partition, msg.Offset, string(msg.Key), string(msg.Value)) //打印消费日志
+			// fmt.Fprintf(os.Stdout, "GroupID-(%s):Topic(%s)\tPartition(%d)\tOffset(%d)\tKey(%s)\tValue(%s)\n",
+			// 	groupID, msg.Topic, msg.Partition, msg.Offset, string(msg.Key), string(msg.Value)) //打印消费日志
+			log.Printf("part:%d, offset:%d, key:%s", msg.Partition, msg.Offset, msg.Key) //降低文件io的影响
 
 			workerQueue[bytesToInt(msg.Key)%queueLen] <- msg.Value //消费到数据放到chan队列
 
-			log.Println("commit offest:", msg.Offset)
+			// log.Println("commit offest:", msg.Offset)
 			consumer.MarkOffset(msg, "") // mark message as processed
 		case <-signals:
 			fmt.Fprintf(os.Stdout, "exit kafka consume...")
@@ -154,18 +159,18 @@ func init() {
 	}
 	consumer = c
 
-	// consume errors
-	go func() {
-		for err := range consumer.Errors() {
-			log.Printf("consumer%s:Error: %s\n", groupID, err.Error())
-		}
-	}()
-	// consume notifications
-	go func() {
-		for ntf := range consumer.Notifications() {
-			log.Printf("consumer%s:Rebalanced: %+v \n", groupID, ntf)
-		}
-	}()
+	// // consume errors
+	// go func() {
+	// 	for err := range consumer.Errors() {
+	// 		log.Printf("consumer%s:Error: %s\n", groupID, err.Error())
+	// 	}
+	// }()
+	// // consume notifications
+	// go func() {
+	// 	for ntf := range consumer.Notifications() {
+	// 		log.Printf("consumer%s:Rebalanced: %+v \n", groupID, ntf)
+	// 	}
+	// }()
 }
 
 func bytesToInt(b []byte) int { //字节转换成整形

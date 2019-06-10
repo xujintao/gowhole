@@ -45,10 +45,10 @@ kafka_2.11-0.11.0.3
 ```
 docker exec kafka1 \
       kafka-topics.sh \
-      --create --topic topic002 \
-      --partitions 4 \
+      --create --topic topic001 \
+      --partitions 1 \
       --zookeeper zookeeper:2181 \
-      --replication-factor 2
+      --replication-factor 1
 
 ```
 
@@ -68,7 +68,14 @@ docker exec kafka1  \
    --describe \
    --topic topic002 \
    --zookeeper zookeeper:2181
+```
 
+### 消费消息
+```
+docker exec kafka1 \
+   kafka-console-consumer.sh \
+   --topic topic001 \
+   --bootstrap-server kafka1:9092,kafka2:9092,kafka3:9092
 ```
 
 ### 生产消息
@@ -79,7 +86,7 @@ docker exec kafka1  \
 ```
 docker exec -it kafka1 \
    kafka-console-producer.sh \
-   --topic topic002 \
+   --topic topic001 \
    --broker-list kafka1:9092,kafka2:9092,kafka3:9092
 
 ```
